@@ -1,0 +1,63 @@
+This is the first prompt for project "1collective". Read it carefully —
+it's orientation, not a build order.
+
+## What 1collective is
+1collective is a back-office operations platform for blue-collar
+businesses — construction, HVAC, plumbing, electrical, landscaping,
+remodeling, and the trades broadly. The long-term product will handle
+the full back end of running one of these businesses: jobs, customers,
+scheduling, invoicing and payments, estimates, employees and
+timesheets, materials, and documents. It is multi-tenant — each
+business is its own org.
+
+## Project goal
+Give blue-collar operators a single piece of software that runs their
+entire back office, replacing the patchwork of spreadsheets, texts,
+paper, and disconnected SaaS tools they're stuck with today.
+
+## How this project is set up — important
+- **GitHub is already connected** to this Replit project. The repo is
+  https://github.com/jorge570/1collective.git. Every change you make
+  here should be commitable/pushable to that repo. Don't try to
+  reconnect it.
+- **Claude Code is the primary development environment.** I (the
+  human, Jorge) will be talking to Claude Code locally on my machine,
+  and most non-trivial editing — architecture, refactors, multi-file
+  features, schema work — will happen there and flow into this repo
+  via GitHub.
+- **Replit's job** is to be the host: where the app runs, where the
+  preview lives, where the database lives, where deploys happen. The
+  Replit Agent is a collaborator for fast scaffolds and quick fixes,
+  but it is not the lead builder.
+- The working loop is: Claude Code edits → push to GitHub → Replit
+  pulls → preview updates. Or: Replit Agent edits → push to GitHub →
+  I pull down in Claude Code. Either direction is fine; the shared
+  source of truth is GitHub.
+
+## What to do right now
+Bootstrap a minimal, clean starting point — nothing more. Specifically:
+
+- Next.js (latest, App Router) + TypeScript + Tailwind CSS
+- A single landing page at `/` that just says "1collective" and a
+  one-line tagline ("Operations software for the trades")
+- A `README.md` with: project name, one-paragraph description (use the
+  "What 1collective is" section above), and how to run it locally
+- A `.gitignore` appropriate for Next.js
+- Commit and push to the connected GitHub repo as the first commit on
+  `main`
+
+That's it. Do not scaffold auth, databases, modules, dashboards, or
+anything else yet — those decisions will be made deliberately in
+Claude Code and pulled in from there.
+
+## Code style (applies forever, not just now)
+- No comments unless explaining a non-obvious *why*
+- No premature abstractions, no speculative "utils" layers
+- No error handling for cases that can't happen
+- Edit existing files rather than creating new ones when possible
+
+When you're done, give me:
+- The Replit preview URL
+- Confirmation that the first commit landed on GitHub
+- Anything you decided that I should know about (stack version,
+  folder layout, etc.)
