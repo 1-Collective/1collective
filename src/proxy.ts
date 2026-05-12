@@ -4,7 +4,7 @@ import { NextResponse, type NextRequest } from "next/server";
 const PUBLIC_PATHS = ["/", "/login", "/signup", "/admin/login"];
 const STATIC_PREFIXES = ["/_next", "/api/webhooks", "/favicon"];
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   if (STATIC_PREFIXES.some((p) => pathname.startsWith(p))) {
