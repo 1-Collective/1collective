@@ -20,24 +20,25 @@ import {
 import { Button } from "@/components/ui/button";
 import { differenceInDays } from "date-fns";
 
+const ICON = "h-4 w-4";
 const NAV_FIELD: NavItem[] = [
-  { label: "Dashboard", href: "/app", icon: LayoutDashboard },
-  { label: "My projects", href: "/app/precon", icon: FileCheck },
-  { label: "Files", href: "/app/drive", icon: FolderOpen },
-  { label: "Settings", href: "/app/settings", icon: Settings },
+  { label: "Dashboard", href: "/app", icon: <LayoutDashboard className={ICON} /> },
+  { label: "My projects", href: "/app/precon", icon: <FileCheck className={ICON} /> },
+  { label: "Files", href: "/app/drive", icon: <FolderOpen className={ICON} /> },
+  { label: "Settings", href: "/app/settings", icon: <Settings className={ICON} /> },
 ];
 
 const NAV_FULL: NavItem[] = [
-  { label: "Dashboard", href: "/app", icon: LayoutDashboard },
-  { label: "CRM", href: "/app/crm", icon: Users },
-  { label: "Pre-Con", href: "/app/precon", icon: FileCheck },
-  { label: "Revenue", href: "/app/revenue", icon: TrendingUp },
-  { label: "Drive", href: "/app/drive", icon: FolderOpen },
-  { label: "Estimating", href: "/app/estimating", icon: Calculator, badge: "Soon" },
-  { label: "Branding", href: "/app/branding", icon: Palette },
-  { label: "Team", href: "/app/team", icon: UsersRound },
-  { label: "Billing", href: "/app/billing", icon: CreditCard },
-  { label: "Settings", href: "/app/settings", icon: Settings },
+  { label: "Dashboard", href: "/app", icon: <LayoutDashboard className={ICON} /> },
+  { label: "CRM", href: "/app/crm", icon: <Users className={ICON} /> },
+  { label: "Pre-Con", href: "/app/precon", icon: <FileCheck className={ICON} /> },
+  { label: "Revenue", href: "/app/revenue", icon: <TrendingUp className={ICON} /> },
+  { label: "Drive", href: "/app/drive", icon: <FolderOpen className={ICON} /> },
+  { label: "Estimating", href: "/app/estimating", icon: <Calculator className={ICON} />, badge: "Soon" },
+  { label: "Branding", href: "/app/branding", icon: <Palette className={ICON} /> },
+  { label: "Team", href: "/app/team", icon: <UsersRound className={ICON} /> },
+  { label: "Billing", href: "/app/billing", icon: <CreditCard className={ICON} /> },
+  { label: "Settings", href: "/app/settings", icon: <Settings className={ICON} /> },
 ];
 
 export default async function AppLayout({

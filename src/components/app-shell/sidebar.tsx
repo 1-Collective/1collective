@@ -3,12 +3,11 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
-import type { LucideIcon } from "lucide-react";
 
 export interface NavItem {
   label: string;
   href: string;
-  icon: LucideIcon;
+  icon: React.ReactNode;
   badge?: string;
 }
 
@@ -38,7 +37,6 @@ export function Sidebar({
 
       <nav className="flex-1 space-y-0.5 overflow-y-auto px-2 py-2 scrollbar-thin">
         {items.map((item) => {
-          const Icon = item.icon;
           const isActive =
             pathname === item.href ||
             (item.href !== "/app" && item.href !== "/admin" && pathname.startsWith(item.href));
@@ -54,7 +52,7 @@ export function Sidebar({
               )}
             >
               <span className="flex items-center gap-2">
-                <Icon className="h-4 w-4" />
+                {item.icon}
                 {item.label}
               </span>
               {item.badge && (

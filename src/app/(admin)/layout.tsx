@@ -11,13 +11,14 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
+const ICON = "h-4 w-4";
 const NAV: NavItem[] = [
-  { label: "Overview", href: "/admin", icon: LayoutDashboard },
-  { label: "Tenants", href: "/admin/tenants", icon: Building2 },
-  { label: "Invite links", href: "/admin/invite-links", icon: TicketIcon },
-  { label: "Contract checklist", href: "/admin/checklist", icon: ListChecks },
-  { label: "Clause library", href: "/admin/clauses", icon: BookOpen },
-  { label: "Folder templates", href: "/admin/templates", icon: Folders },
+  { label: "Overview", href: "/admin", icon: <LayoutDashboard className={ICON} /> },
+  { label: "Tenants", href: "/admin/tenants", icon: <Building2 className={ICON} /> },
+  { label: "Invite links", href: "/admin/invite-links", icon: <TicketIcon className={ICON} /> },
+  { label: "Contract checklist", href: "/admin/checklist", icon: <ListChecks className={ICON} /> },
+  { label: "Clause library", href: "/admin/clauses", icon: <BookOpen className={ICON} /> },
+  { label: "Folder templates", href: "/admin/templates", icon: <Folders className={ICON} /> },
 ];
 
 export default async function AdminLayout({
