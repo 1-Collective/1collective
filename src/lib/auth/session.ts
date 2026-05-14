@@ -171,10 +171,23 @@ export const getSession = cache(async (): Promise<SessionContext> => {
 
 export async function requireTenantUser() {
   const session = await getSession();
-  if (session.kind !== "tenant_user") {
-    throw new Error("Unauthorized: tenant user required");
+  if (session.kind === "tenant_user") return session;
+  if (session.kind === "platform_operator" && session.impersonating) {
+    const imp = session.impersonating;
+    return {
+      kind: "tenant_user" as const,
+      userId: imp.targetUserId,
+      email: imp.targetUserEmail,
+      tenantId: imp.tenantId,
+      tenantSlug: imp.tenantSlug,
+      tenantStatus: "active" as const,
+      roleKeys: ["super_admin"],
+      isFieldRole: false,
+      onboardingComplete: true,
+      passwordResetRequired: false,
+    };
   }
-  return session;
+  throw new Error("Unauthorized: tenant user required");
 }
 
 export async function requirePlatformOperator() {
