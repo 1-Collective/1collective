@@ -41,10 +41,10 @@ export const FOUNDATIONAL_MODULES: Record<FoundationalModuleKey, FoundationalMod
   vault: {
     key: "vault",
     name: "Vault",
-    enabled: false,
+    enabled: true,
     source: "new",
-    requiredCredentials: ["INTEGRATION_TOKEN_ENCRYPTION_KEY"],
-    notes: "Secure tenant-scoped document store on Supabase Storage.",
+    requiredCredentials: [],
+    notes: "Secure tenant-scoped document store on Supabase Storage. Tenant isolation enforced via RLS on cc_vault_documents and tenant-prefixed storage paths served only through short-lived signed URLs.",
   },
   ai_core: {
     key: "ai_core",
@@ -163,6 +163,6 @@ export function isModuleEnabled(key: FoundationalModuleKey): boolean {
 }
 
 export function missingCredentialsFor(key: FoundationalModuleKey): string[] {
-  const module = FOUNDATIONAL_MODULES[key];
-  return module.requiredCredentials.filter((env) => !process.env[env]);
+  const mod = FOUNDATIONAL_MODULES[key];
+  return mod.requiredCredentials.filter((env) => !process.env[env]);
 }

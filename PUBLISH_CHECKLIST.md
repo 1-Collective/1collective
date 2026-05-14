@@ -100,7 +100,7 @@ These render as "Coming soon" in the sidebar. They will not crash, but a user cl
 
 | Module | Path | Sidebar section |
 |---|---|---|
-| Vault | `src/app/(app)/app/vault/page.tsx` | Files |
+| ~~Vault~~ ✅ | `src/app/(app)/app/vault/page.tsx` (shipped) | Files |
 | Invoicing | `src/app/(app)/app/invoicing/page.tsx` | Accounting |
 | Manpower | `src/app/(app)/app/manpower/page.tsx` | Delivery |
 | Projects | `src/app/(app)/app/projects/page.tsx` | Delivery |
