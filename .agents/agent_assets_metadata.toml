@@ -1,5 +1,4 @@
 uploads = []
-outputs = []
 
 [[generated]]
 id = "knJ_nmnBoh22-qV9Nc5Bl"
@@ -18,3 +17,9 @@ id = "JmMH8uJqGfUMLA7XkD74W"
 uri = "file://src/assets/tools-tailgate.png"
 type = "image"
 title = "Tools on a truck tailgate"
+
+[[outputs]]
+id = "FLbmGyF5__4ojvY5kU87T"
+uri = "file://docs/sample-invoice.pdf"
+type = "pdf"
+title = "Sample invoice PDF (rendered by src/lib/pdf)"

@@ -81,6 +81,18 @@ External-service factories must `throw new MissingCredentialsError(...)` at call
 - `npm run lint` — zero errors, zero warnings (the `.local/` skill templates are correctly ignored)
 - New files: no comments unless explaining a non-obvious *why*; no emojis in UI; edit existing files when possible
 
+## Layer-zero infrastructure libs
+
+These live in `src/lib/<name>/` and are consumed by feature modules. Each follows the `MissingCredentialsError`-at-call-time convention so the app boots cleanly with all keys blank.
+
+| Lib | Module | Required env | Notes |
+|---|---|---|---|
+| PDF | `src/lib/pdf/document-pdf.ts` | _(none)_ | `pdfkit`-based, branded invoice/quote layout. Externalized via `serverExternalPackages: ["pdfkit"]` in `next.config.ts` so the AFM font files load at runtime. Dev smoke route: `/api/dev/sample-pdf` (gated on `ENABLE_DEV_LOGIN=1` + `NODE_ENV !== "production"`). |
+| Email | `src/lib/email/index.ts` | `RESEND_API_KEY`, `EMAIL_FROM_ADDRESS` | Resend client cached lazily; thin `sendEmail({ to, subject, html | text })` wrapper. |
+| SMS | `src/lib/sms/index.ts` | `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM_NUMBER` | Twilio client cached lazily; `isE164()` helper exposed for shared validation. |
+
+When porting a CC route that needs PDFs/email/SMS, import from these libs rather than re-wiring the third-party SDK.
+
 ## Local commands
 
 ```bash

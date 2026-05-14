@@ -13,10 +13,19 @@ const PUBLIC_PATHS = [
 ];
 const STATIC_PREFIXES = ["/_next", "/api/webhooks", "/favicon"];
 
+function isDevApiAllowed(): boolean {
+  return (
+    process.env.NODE_ENV !== "production" && process.env.ENABLE_DEV_LOGIN === "1"
+  );
+}
+
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   if (STATIC_PREFIXES.some((p) => pathname.startsWith(p))) {
+    return NextResponse.next();
+  }
+  if (pathname.startsWith("/api/dev") && isDevApiAllowed()) {
     return NextResponse.next();
   }
 

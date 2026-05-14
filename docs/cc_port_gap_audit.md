@@ -89,18 +89,17 @@ Entire app surfaces in CC (`(customer-portal)/`, `(employee-portal)/`, `client-p
 - `weather.ts`, `tasks.ts`, `tools.ts`, `toolConnections.ts`
 - `pipeline.ts`, `dispatch.ts`, `rateSettings.ts`, `overhead.ts`
 
-## 4. Cross-cutting infrastructure missing
+## 4. Cross-cutting infrastructure
 
-CC ships these as `lib/` modules. None exist in 1collective. Each one is a prerequisite for many of the verticals above.
+CC ships these as `lib/` modules. Each one is a prerequisite for many of the verticals above.
 
 | CC lib | Used by | 1coll equivalent |
 |---|---|---|
-| `pdfGenerator.ts` | Estimating, Invoicing, AIA pay apps, change orders, lien waivers | **none** |
-| `twilio.ts` | AI Phone (Daniella), SMS conversations, customer notify | **none** |
+| `pdfGenerator.ts` | Estimating, Invoicing, AIA pay apps, change orders, lien waivers | ✅ `src/lib/pdf/document-pdf.ts` (5 tests, dev sample at `/api/dev/sample-pdf`) |
+| `email.ts` | Transactional email everywhere | ✅ `src/lib/email/` (Resend; throws `MissingCredentialsError` until `RESEND_API_KEY` set) |
+| `sms.ts` + `twilio.ts` | AI Phone (Daniella), SMS conversations, customer notify | ✅ `src/lib/sms/` (Twilio; throws `MissingCredentialsError` until Twilio env set) |
 | `vapi.ts` | AI Phone (Serana outbound) | **none** |
-| `sms.ts` | Customer/employee notifications, marketing | **none** |
-| `email.ts` | Transactional email everywhere | **none** |
-| `push.ts` | Mobile push notifications | **none** |
+| `push.ts` | Mobile push notifications | **none** (deferred until mobile app lands) |
 | `objectAcl.ts` | Shared docs beyond Vault's tenant-scoped model | **none** |
 | `amberPublisher.ts` | Meta/IG/GBP social posting | **none** |
 | `cron/scheduler.ts` | Recurring invoices, follow-ups, reminders, weather pulls | **none** |
@@ -110,9 +109,9 @@ CC ships these as `lib/` modules. None exist in 1collective. Each one is a prere
 ## 5. Suggested phased roadmap
 
 ### Phase 1 — Layer-zero infrastructure (unblocks everything else)
-1. `src/lib/pdf/` — PDF generation (port `pdfGenerator.ts`)
-2. `src/lib/email/` — transactional email (Resend or similar)
-3. `src/lib/sms/` and `src/lib/twilio/` — SMS + voice
+1. ✅ `src/lib/pdf/` — PDF generation (ported from `pdfGenerator.ts`)
+2. ✅ `src/lib/email/` — transactional email (Resend factory)
+3. ✅ `src/lib/sms/` — SMS via Twilio
 4. `src/lib/cron/` — scheduled jobs (Vercel/Replit cron)
 5. `src/lib/push/` — push notifications (when mobile lands)
 
