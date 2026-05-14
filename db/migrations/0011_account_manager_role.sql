@@ -4,5 +4,3 @@
 -- the tenants assigned to them via operator_tenant_assignments.
 
 ALTER TYPE platform_operator_role ADD VALUE IF NOT EXISTS 'account_manager';
-</content>
-</invoke>

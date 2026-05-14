@@ -47,5 +47,3 @@ CREATE OR REPLACE FUNCTION public.operator_can_access_tenant(p_tenant_id uuid)
     END;
 $$;
 REVOKE EXECUTE ON FUNCTION public.operator_can_access_tenant(uuid) FROM public, anon, authenticated;
-</content>
-</invoke>

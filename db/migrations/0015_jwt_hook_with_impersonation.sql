@@ -75,5 +75,3 @@ BEGIN
   RETURN jsonb_build_object('claims', v_claims);
 END;
 $$;
-</content>
-</invoke>

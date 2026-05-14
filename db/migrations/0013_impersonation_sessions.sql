@@ -42,5 +42,3 @@ ALTER TABLE public.impersonation_sessions FORCE ROW LEVEL SECURITY;
 CREATE POLICY auth_admin_read ON public.impersonation_sessions
   FOR SELECT TO supabase_auth_admin
   USING (true);
-</content>
-</invoke>

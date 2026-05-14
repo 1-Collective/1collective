@@ -2481,3 +2481,212 @@ alter table integration_events
 create index if not exists integration_events_needs_attention_idx
   on integration_events (provider, status)
   where status = 'needs_attention';
+
+-- ============================================================
+-- 0011_account_manager_role.sql
+-- ============================================================
+-- Phase 1: Account Manager role + operator-to-tenant assignments.
+-- An account_manager is a One Collective employee responsible for a specific set
+-- of tenants. Super operators see/manage all tenants; account_managers only see
+-- the tenants assigned to them via operator_tenant_assignments.
+
+ALTER TYPE platform_operator_role ADD VALUE IF NOT EXISTS 'account_manager';
+
+-- ============================================================
+-- 0012_operator_tenant_assignments.sql
+-- ============================================================
+-- Phase 1: which Account Managers handle which tenants.
+
+CREATE TABLE public.operator_tenant_assignments (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  operator_id uuid NOT NULL REFERENCES public.platform_operators(id) ON DELETE CASCADE,
+  tenant_id uuid NOT NULL REFERENCES public.tenants(id) ON DELETE CASCADE,
+  assigned_by uuid REFERENCES public.platform_operators(id),
+  notes text,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  removed_at timestamptz,
+  UNIQUE (operator_id, tenant_id)
+);
+
+CREATE INDEX operator_tenant_assignments_operator_active_idx
+  ON public.operator_tenant_assignments(operator_id)
+  WHERE removed_at IS NULL;
+CREATE INDEX operator_tenant_assignments_tenant_idx
+  ON public.operator_tenant_assignments(tenant_id);
+
+ALTER TABLE public.operator_tenant_assignments ENABLE ROW LEVEL SECURITY;
+
+-- Only operators can read/write this table. (Tenants never see operator-side data.)
+CREATE POLICY operator_tenant_assignments_all ON public.operator_tenant_assignments
+  FOR ALL USING (is_platform_operator())
+  WITH CHECK (is_platform_operator());
+
+-- Helper: does the current operator have access to this tenant?
+-- Used by future RLS policies and Server Actions for AM-scoped queries.
+CREATE OR REPLACE FUNCTION public.operator_can_access_tenant(p_tenant_id uuid)
+  RETURNS boolean
+  LANGUAGE sql STABLE SECURITY DEFINER
+  SET search_path = public, pg_temp
+  AS $$
+  SELECT
+    CASE
+      WHEN NOT is_platform_operator() THEN false
+      WHEN EXISTS (
+        SELECT 1 FROM public.platform_operators
+        WHERE id = auth.uid() AND operator_role = 'super'
+      ) THEN true
+      ELSE EXISTS (
+        SELECT 1 FROM public.operator_tenant_assignments
+        WHERE operator_id = auth.uid()
+          AND tenant_id = p_tenant_id
+          AND removed_at IS NULL
+      )
+    END;
+$$;
+REVOKE EXECUTE ON FUNCTION public.operator_can_access_tenant(uuid) FROM public, anon, authenticated;
+
+-- ============================================================
+-- 0013_impersonation_sessions.sql
+-- ============================================================
+-- Phase 1: impersonation_sessions tracks active "View as" sessions.
+-- The JWT hook reads this to inject the target user's tenant context
+-- into the operator's session. The audit log writes records on start/stop.
+
+CREATE TABLE public.impersonation_sessions (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  operator_id uuid NOT NULL REFERENCES public.platform_operators(id) ON DELETE CASCADE,
+  target_user_id uuid NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+  target_tenant_id uuid NOT NULL REFERENCES public.tenants(id) ON DELETE CASCADE,
+  reason text,
+  started_at timestamptz NOT NULL DEFAULT now(),
+  ended_at timestamptz
+);
+
+CREATE UNIQUE INDEX impersonation_sessions_one_active_per_operator_idx
+  ON public.impersonation_sessions(operator_id)
+  WHERE ended_at IS NULL;
+CREATE INDEX impersonation_sessions_target_user_idx
+  ON public.impersonation_sessions(target_user_id);
+CREATE INDEX impersonation_sessions_tenant_idx
+  ON public.impersonation_sessions(target_tenant_id);
+
+ALTER TABLE public.impersonation_sessions ENABLE ROW LEVEL SECURITY;
+
+-- Operators see/write only their own impersonation records.
+-- Super operators see all (for audit / oversight).
+CREATE POLICY impersonation_sessions_self_or_super ON public.impersonation_sessions
+  FOR ALL USING (
+    operator_id = auth.uid()
+    OR EXISTS (
+      SELECT 1 FROM public.platform_operators
+      WHERE id = auth.uid() AND operator_role = 'super'
+    )
+  )
+  WITH CHECK (operator_id = auth.uid());
+
+-- The JWT hook (running as supabase_auth_admin) needs to read this table
+-- to know whether to apply impersonation claims.
+GRANT SELECT ON public.impersonation_sessions TO supabase_auth_admin;
+
+ALTER TABLE public.impersonation_sessions FORCE ROW LEVEL SECURITY;
+CREATE POLICY auth_admin_read ON public.impersonation_sessions
+  FOR SELECT TO supabase_auth_admin
+  USING (true);
+
+-- ============================================================
+-- 0014_password_reset_required.sql
+-- ============================================================
+-- Phase 1: track which users must set a new password on next sign-in.
+-- Set by operators when they manually set/regenerate a password and want
+-- the user to rotate it themselves. Cleared automatically on successful reset.
+
+ALTER TABLE public.users
+  ADD COLUMN password_reset_required boolean NOT NULL DEFAULT false;
+COMMENT ON COLUMN public.users.password_reset_required IS
+  'When true, the next sign-in must redirect the user to the in-app set-new-password form before they can access the rest of the app. Cleared by the password-change flow.';
+
+ALTER TABLE public.platform_operators
+  ADD COLUMN password_reset_required boolean NOT NULL DEFAULT false;
+COMMENT ON COLUMN public.platform_operators.password_reset_required IS
+  'When true, the next sign-in must redirect the operator to the in-app set-new-password form before they can access /admin. Cleared by the password-change flow.';
+
+-- ============================================================
+-- 0015_jwt_hook_with_impersonation.sql
+-- ============================================================
+-- Phase 1: extend custom_access_token_hook to inject impersonation claims.
+--
+-- When a platform operator has an active impersonation_session, the JWT issued
+-- to them on token refresh gets:
+--   tenant_id            = target's tenant_id  (so RLS scopes them to that tenant)
+--   role_keys            = ['super_admin']     (so they have full power within it)
+--   is_field_role        = false               (operators never field-scoped)
+--   is_impersonating     = true                (so the UI shows the banner)
+--   impersonating_user_id = target user UUID   (for banner display + audit context)
+--   is_platform_operator = true                (preserved; they can still hit /admin)
+--
+-- This means the operator can navigate both /admin and /app/* during impersonation,
+-- and the banner shows on every page.
+
+CREATE OR REPLACE FUNCTION public.custom_access_token_hook(event jsonb)
+RETURNS jsonb
+LANGUAGE plpgsql
+STABLE
+SET search_path = public, pg_temp
+AS $$
+DECLARE
+  v_user_id uuid := (event ->> 'user_id')::uuid;
+  v_tenant_id uuid;
+  v_is_field boolean := false;
+  v_role_keys text[];
+  v_claims jsonb := event -> 'claims';
+  v_imp_target_user_id uuid;
+  v_imp_target_tenant_id uuid;
+BEGIN
+  -- 1. Standard tenant lookup
+  SELECT tenant_id INTO v_tenant_id
+  FROM public.users
+  WHERE id = v_user_id;
+
+  IF v_tenant_id IS NULL THEN
+    -- 2. Not a tenant user. Probably a platform operator.
+    IF EXISTS (SELECT 1 FROM public.platform_operators WHERE id = v_user_id) THEN
+      v_claims := v_claims || jsonb_build_object('is_platform_operator', true);
+
+      -- 3. Check active impersonation. If found, layer in tenant-context claims.
+      SELECT i.target_user_id, i.target_tenant_id
+        INTO v_imp_target_user_id, v_imp_target_tenant_id
+        FROM public.impersonation_sessions i
+       WHERE i.operator_id = v_user_id
+         AND i.ended_at IS NULL
+       ORDER BY i.started_at DESC
+       LIMIT 1;
+
+      IF v_imp_target_tenant_id IS NOT NULL THEN
+        v_claims := v_claims
+          || jsonb_build_object('tenant_id', v_imp_target_tenant_id::text)
+          || jsonb_build_object('role_keys', jsonb_build_array('super_admin'))
+          || jsonb_build_object('is_field_role', false)
+          || jsonb_build_object('is_impersonating', true)
+          || jsonb_build_object('impersonating_user_id', v_imp_target_user_id::text);
+      END IF;
+    END IF;
+  ELSE
+    -- 4. Tenant user
+    SELECT
+      coalesce(array_agg(r.key), array[]::text[]),
+      coalesce(bool_or(r.is_field), false)
+    INTO v_role_keys, v_is_field
+    FROM public.user_role_assignments ura
+    JOIN public.roles r ON r.id = ura.role_id
+    WHERE ura.user_id = v_user_id
+      AND ura.tenant_id = v_tenant_id;
+
+    v_claims := v_claims
+      || jsonb_build_object('tenant_id', v_tenant_id::text)
+      || jsonb_build_object('role_keys', to_jsonb(v_role_keys))
+      || jsonb_build_object('is_field_role', v_is_field);
+  END IF;
+
+  RETURN jsonb_build_object('claims', v_claims);
+END;
+$$;
