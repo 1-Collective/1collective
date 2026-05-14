@@ -4,5 +4,3 @@
 -- files in the bucket - that's the warning. Drop the policy.
 
 drop policy if exists "logos: public read" on storage.objects;
-</content>
-</invoke>

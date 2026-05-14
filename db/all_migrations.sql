@@ -1762,8 +1762,7 @@ revoke execute on function public.current_tenant_id()              from public;
 -- supabase_auth_admin still needs custom_access_token_hook (grant remains)
 -- supabase_auth_admin needs to use these helpers indirectly via the hook;
 -- it does so by reading the underlying tables (granted in 0006), not by calling the helpers.
-</content>
-</invoke>-- Revoke EXECUTE from anon + authenticated explicitly.
+-- Revoke EXECUTE from anon + authenticated explicitly.
 -- These helpers are only called from inside RLS policies; they should not be
 -- exposed at /rest/v1/rpc/<name>.
 
@@ -1772,21 +1771,18 @@ revoke execute on function public.is_field_role()                   from anon, a
 revoke execute on function public.field_user_can_see(uuid, text)    from anon, authenticated;
 revoke execute on function public.user_is_assigned_to_project(uuid) from anon, authenticated;
 revoke execute on function public.current_tenant_id()               from anon, authenticated;
-</content>
-</invoke>-- The logos bucket has bucket.public = true, which already makes individual
+-- The logos bucket has bucket.public = true, which already makes individual
 -- object URLs publicly fetchable WITHOUT any SELECT policy. The "logos: public read"
 -- SELECT policy is redundant for object fetches but allows clients to LIST all
 -- files in the bucket - that's the warning. Drop the policy.
 
 drop policy if exists "logos: public read" on storage.objects;
-</content>
-</invoke>-- Tell Postgres the projects_field_safe view should run as the caller (not view owner),
+-- Tell Postgres the projects_field_safe view should run as the caller (not view owner),
 -- so it isn't flagged as SECURITY DEFINER. We still keep security_barrier=true for the
 -- planner-level leak prevention on the conditional financial columns.
 
 alter view public.projects_field_safe set (security_invoker = true);
-</content>
-</invoke>-- [CC-FOUNDATION] Phase 1: shared OAuth/credential storage for tenant
+-- [CC-FOUNDATION] Phase 1: shared OAuth/credential storage for tenant
 -- integrations (QuickBooks, Google, Meta, Vapi, Twilio sub-accounts).
 -- Tokens are encrypted at the application layer using
 -- INTEGRATION_TOKEN_ENCRYPTION_KEY (AES-256-GCM); only ciphertext is stored.

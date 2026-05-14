@@ -43,5 +43,3 @@ revoke execute on function public.current_tenant_id()              from public;
 -- supabase_auth_admin still needs custom_access_token_hook (grant remains)
 -- supabase_auth_admin needs to use these helpers indirectly via the hook;
 -- it does so by reading the underlying tables (granted in 0006), not by calling the helpers.
-</content>
-</invoke>

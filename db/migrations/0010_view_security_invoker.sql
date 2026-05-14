@@ -3,5 +3,3 @@
 -- planner-level leak prevention on the conditional financial columns.
 
 alter view public.projects_field_safe set (security_invoker = true);
-</content>
-</invoke>
