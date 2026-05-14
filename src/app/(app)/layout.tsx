@@ -2,15 +2,23 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { getSession } from "@/lib/auth/session";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { Sidebar, type NavItem } from "@/components/app-shell/sidebar";
+import { Sidebar, type NavSection, type NavItem } from "@/components/app-shell/sidebar";
 import {
   LayoutDashboard,
-  Users,
-  FileCheck,
-  TrendingUp,
-  FolderOpen,
-  Calculator,
   Palette,
+  Share2,
+  CalendarDays,
+  Users,
+  Phone,
+  Calculator,
+  FileCheck,
+  Briefcase,
+  HardHat,
+  TrendingUp,
+  Receipt,
+  FolderOpen,
+  Lock,
+  Plug,
   UsersRound,
   CreditCard,
   Settings,
@@ -21,23 +29,67 @@ import { Button } from "@/components/ui/button";
 import { differenceInDays } from "date-fns";
 
 const ICON = "h-4 w-4";
-const NAV_FIELD: NavItem[] = [
-  { label: "Dashboard", href: "/app", icon: <LayoutDashboard className={ICON} /> },
-  { label: "My projects", href: "/app/precon", icon: <FileCheck className={ICON} /> },
-  { label: "Files", href: "/app/drive", icon: <FolderOpen className={ICON} /> },
-  { label: "Settings", href: "/app/settings", icon: <Settings className={ICON} /> },
+
+const NAV_FULL: NavSection[] = [
+  {
+    section: "",
+    items: [
+      { label: "Dashboard", href: "/app", icon: <LayoutDashboard className={ICON} /> },
+    ],
+  },
+  {
+    section: "Marketing",
+    items: [
+      { label: "Branding", href: "/app/branding", icon: <Palette className={ICON} /> },
+      { label: "Social", href: "/app/social", icon: <Share2 className={ICON} />, badge: "New" },
+      { label: "Booking", href: "/app/booking", icon: <CalendarDays className={ICON} />, badge: "New" },
+    ],
+  },
+  {
+    section: "Sales",
+    items: [
+      { label: "CRM", href: "/app/crm", icon: <Users className={ICON} /> },
+      { label: "AI Phone", href: "/app/ai-phone", icon: <Phone className={ICON} />, badge: "New" },
+    ],
+  },
+  {
+    section: "Delivery",
+    items: [
+      { label: "Estimating", href: "/app/estimating", icon: <Calculator className={ICON} /> },
+      { label: "Pre-Con", href: "/app/precon", icon: <FileCheck className={ICON} /> },
+      { label: "Projects", href: "/app/projects", icon: <Briefcase className={ICON} />, badge: "New" },
+      { label: "Manpower", href: "/app/manpower", icon: <HardHat className={ICON} />, badge: "New" },
+    ],
+  },
+  {
+    section: "Accounting",
+    items: [
+      { label: "Revenue", href: "/app/revenue", icon: <TrendingUp className={ICON} /> },
+      { label: "Invoicing", href: "/app/invoicing", icon: <Receipt className={ICON} />, badge: "New" },
+    ],
+  },
+  {
+    section: "Files",
+    items: [
+      { label: "Drive", href: "/app/drive", icon: <FolderOpen className={ICON} /> },
+      { label: "Vault", href: "/app/vault", icon: <Lock className={ICON} />, badge: "New" },
+    ],
+  },
+  {
+    section: "Admin",
+    items: [
+      { label: "Integrations", href: "/app/integrations", icon: <Plug className={ICON} />, badge: "New" },
+      { label: "Team", href: "/app/team", icon: <UsersRound className={ICON} /> },
+      { label: "Billing", href: "/app/billing", icon: <CreditCard className={ICON} /> },
+      { label: "Settings", href: "/app/settings", icon: <Settings className={ICON} /> },
+    ],
+  },
 ];
 
-const NAV_FULL: NavItem[] = [
+const NAV_FIELD: NavItem[] = [
   { label: "Dashboard", href: "/app", icon: <LayoutDashboard className={ICON} /> },
-  { label: "CRM", href: "/app/crm", icon: <Users className={ICON} /> },
-  { label: "Pre-Con", href: "/app/precon", icon: <FileCheck className={ICON} /> },
-  { label: "Revenue", href: "/app/revenue", icon: <TrendingUp className={ICON} /> },
-  { label: "Drive", href: "/app/drive", icon: <FolderOpen className={ICON} /> },
-  { label: "Estimating", href: "/app/estimating", icon: <Calculator className={ICON} />, badge: "Soon" },
-  { label: "Branding", href: "/app/branding", icon: <Palette className={ICON} /> },
-  { label: "Team", href: "/app/team", icon: <UsersRound className={ICON} /> },
-  { label: "Billing", href: "/app/billing", icon: <CreditCard className={ICON} /> },
+  { label: "My projects", href: "/app/projects", icon: <Briefcase className={ICON} /> },
+  { label: "Files", href: "/app/drive", icon: <FolderOpen className={ICON} /> },
   { label: "Settings", href: "/app/settings", icon: <Settings className={ICON} /> },
 ];
 
