@@ -4,7 +4,6 @@ import { NextResponse, type NextRequest } from "next/server";
 const PUBLIC_PATHS = [
   "/",
   "/login",
-  "/signup",
   "/admin/login",
   "/forgot-password",
   "/reset-password",
@@ -42,7 +41,7 @@ export async function proxy(request: NextRequest) {
   const isAdminPath = pathname.startsWith("/admin");
   const isAppPath = pathname.startsWith("/app");
   const isOnboardingPath = pathname.startsWith("/onboarding");
-  const isAuthPath = ["/login", "/signup", "/admin/login"].some((p) =>
+  const isAuthPath = ["/login", "/admin/login"].some((p) =>
     pathname.startsWith(p)
   );
 

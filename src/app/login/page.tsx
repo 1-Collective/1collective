@@ -64,12 +64,6 @@ export default async function LoginPage({
               </Link>
             </div>
           </form>
-          <p className="mt-6 text-center text-xs text-[var(--color-muted-foreground)]">
-            Don&apos;t have an account?{" "}
-            <Link href="/signup" className="underline">
-              Create a workspace
-            </Link>
-          </p>
         </CardContent>
       </Card>
     </div>

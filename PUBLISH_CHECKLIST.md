@@ -32,6 +32,25 @@ Last audited: 2026-05-14 (commit `0893a31`).
 - Currently falls back to `https://1-collective.replit.app` in `src/app/forgot-password/actions.ts` and `src/app/(app)/app/settings/account/actions.ts`.
 - If the real prod URL differs, password-reset and email-change confirmation links will be broken.
 
+### C7. Decide assembly-line completeness gate (LOCKED)
+- **Decision (locked):** Option B — finish the full assembly line before publish. All eight placeholder modules (Vault, Invoicing, Manpower, Projects, Social, AI Phone, Booking, plus partials in Drive/Team/Billing) must reach Shipping status before v1.0 ships.
+- Build sequence: Foundation → Vault → AI Core → Google → Booking → AI Phone (Daniella → Serana) → Social → QBO + Invoicing → Projects → Manpower → Estimating.
+- Each module must pass: migration with RLS, factory throwing `MissingCredentialsError` at call time, Server Actions with Zod + auth gates, Vitest unit tests, Playwright happy-path test, registry `enabled: true`, sidebar entry un-hidden.
+
+### C8. Re-enable public self-service signup before publish
+- **Current state (locked for build phase):** invite-only. Public `/signup` route returns 404 (`src/app/signup/page.tsx`), the "Create a workspace" link has been removed from `/login`, and `/signup` is no longer in `src/proxy.ts:PUBLIC_PATHS`. Invite-link flow at `/signup/[token]` still works.
+- **Required before publish:** re-enable hardened public self-service signup. The pre-publish version must include:
+  - Restore `src/app/signup/page.tsx` to the original form (git revert of the notFound stub).
+  - Restore `/signup` in `src/proxy.ts:PUBLIC_PATHS` and in `isAuthPath`.
+  - Restore the "Create a workspace" link in `src/app/login/page.tsx`.
+  - Replace the non-transactional provisioning in `signupAction` with a single `provision_tenant(...)` Postgres function call (atomic — no orphan rows on partial failure). See MEDIUM line 103.
+  - Add Zod validation to the action (replace manual `formData.get()` checks).
+  - Decide email-verification policy: either keep `email_confirm: true` (auto-confirm) or flip to require Supabase email-link verification before first `/app` access.
+  - Add per-IP rate limiting on the action (Supabase has some built-in protection, but the app layer should throttle to discourage tenant-spam).
+  - Add CAPTCHA (hCaptcha or Cloudflare Turnstile) — public signup creates infrastructure (tenants + roles), so bot abuse is materially expensive.
+  - Add honeypot field as cheap secondary defense.
+  - Playwright test for the full flow including duplicate-email and slug-collision paths.
+
 ### C6. User-flagged attention list — resolve each before publish
 
 Five items the product owner has explicitly flagged as needing attention before launch. Some are net-new work, some are scope-confirmation gates. Resolve each with a yes/no/deferred verdict before flipping the publish switch.
