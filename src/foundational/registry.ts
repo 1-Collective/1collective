@@ -143,10 +143,10 @@ export const FOUNDATIONAL_MODULES: Record<FoundationalModuleKey, FoundationalMod
   estimating: {
     key: "estimating",
     name: "Estimating + Buyout",
-    enabled: false,
+    enabled: true,
     source: "cc",
     requiredCredentials: [],
-    notes: "CC port: takeoffs, itemized builders, PDF generation, e-signature.",
+    notes: "Itemized estimates with line items, per-tenant numbering (EST-YYYY-NNNN), branded PDF download. Catalog UI and e-signature land in a later phase.",
   },
   crm: {
     key: "crm",

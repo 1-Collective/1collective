@@ -1088,7 +1088,7 @@ declare
   tenant_isolated text[] := array[
     'tenant_locations', 'tenant_service_areas',
     'user_tenant_memberships',
-    'roles', 'role_permissions', 'user_role_assignments',
+    'roles', 'user_role_assignments',
     'onboarding_progress', 'onboarding_contract_ingestion', 'setup_tasks',
     'brand_content', 'brand_content_versions',
     'companies', 'contacts',
@@ -1126,6 +1126,37 @@ begin
     $p$, t);
   end loop;
 end$$;
+
+-- ============================================================
+-- ROLE_PERMISSIONS: no direct tenant_id; isolate by joining through roles
+-- ============================================================
+
+create policy role_permissions_select on role_permissions
+  for select using (
+    is_platform_operator()
+    or exists (
+      select 1 from roles r
+      where r.id = role_permissions.role_id
+        and (r.tenant_id = current_tenant_id() or r.tenant_id is null)
+    )
+  );
+create policy role_permissions_modify on role_permissions
+  for all using (
+    is_platform_operator()
+    or exists (
+      select 1 from roles r
+      where r.id = role_permissions.role_id
+        and r.tenant_id = current_tenant_id()
+    )
+  )
+  with check (
+    is_platform_operator()
+    or exists (
+      select 1 from roles r
+      where r.id = role_permissions.role_id
+        and r.tenant_id = current_tenant_id()
+    )
+  );
 
 -- ============================================================
 -- TENANTS table: users see only their own tenant rows
@@ -1686,3 +1717,351 @@ drop policy if exists auth_admin_read on public.roles;
 create policy auth_admin_read on public.roles
   for select to supabase_auth_admin
   using (true);
+-- Address security advisor warnings:
+--   1) function_search_path_mutable: pin search_path on every function we defined
+--   2) anon/authenticated_security_definer_function_executable: revoke public EXECUTE
+--      from helper functions; they are only meant to be called from within RLS policies
+
+-- (1) Pin search_path
+alter function public.current_tenant_id()
+  set search_path = public, pg_temp;
+
+alter function public.set_updated_at()
+  set search_path = public, pg_temp;
+
+alter function public.enforce_user_operator_disjoint()
+  set search_path = public, pg_temp;
+
+alter function public.enforce_operator_user_disjoint()
+  set search_path = public, pg_temp;
+
+alter function public.custom_access_token_hook(jsonb)
+  set search_path = public, pg_temp;
+
+alter function public.is_platform_operator()
+  set search_path = public, pg_temp;
+
+alter function public.is_field_role()
+  set search_path = public, pg_temp;
+
+alter function public.field_user_can_see(uuid, text)
+  set search_path = public, pg_temp;
+
+alter function public.user_is_assigned_to_project(uuid)
+  set search_path = public, pg_temp;
+
+-- (2) Revoke EXECUTE from public on helper functions that should only be invoked
+-- from inside RLS policies (running in the authenticated user's context via SECURITY DEFINER).
+-- Internal Postgres execution still works since RLS policies run as superuser-equivalent.
+revoke execute on function public.is_platform_operator()           from public;
+revoke execute on function public.is_field_role()                  from public;
+revoke execute on function public.field_user_can_see(uuid, text)   from public;
+revoke execute on function public.user_is_assigned_to_project(uuid) from public;
+revoke execute on function public.current_tenant_id()              from public;
+
+-- supabase_auth_admin still needs custom_access_token_hook (grant remains)
+-- supabase_auth_admin needs to use these helpers indirectly via the hook;
+-- it does so by reading the underlying tables (granted in 0006), not by calling the helpers.
+</content>
+</invoke>-- Revoke EXECUTE from anon + authenticated explicitly.
+-- These helpers are only called from inside RLS policies; they should not be
+-- exposed at /rest/v1/rpc/<name>.
+
+revoke execute on function public.is_platform_operator()            from anon, authenticated;
+revoke execute on function public.is_field_role()                   from anon, authenticated;
+revoke execute on function public.field_user_can_see(uuid, text)    from anon, authenticated;
+revoke execute on function public.user_is_assigned_to_project(uuid) from anon, authenticated;
+revoke execute on function public.current_tenant_id()               from anon, authenticated;
+</content>
+</invoke>-- The logos bucket has bucket.public = true, which already makes individual
+-- object URLs publicly fetchable WITHOUT any SELECT policy. The "logos: public read"
+-- SELECT policy is redundant for object fetches but allows clients to LIST all
+-- files in the bucket - that's the warning. Drop the policy.
+
+drop policy if exists "logos: public read" on storage.objects;
+</content>
+</invoke>-- Tell Postgres the projects_field_safe view should run as the caller (not view owner),
+-- so it isn't flagged as SECURITY DEFINER. We still keep security_barrier=true for the
+-- planner-level leak prevention on the conditional financial columns.
+
+alter view public.projects_field_safe set (security_invoker = true);
+</content>
+</invoke>-- [CC-FOUNDATION] Phase 1: shared OAuth/credential storage for tenant
+-- integrations (QuickBooks, Google, Meta, Vapi, Twilio sub-accounts).
+-- Tokens are encrypted at the application layer using
+-- INTEGRATION_TOKEN_ENCRYPTION_KEY (AES-256-GCM); only ciphertext is stored.
+
+create table if not exists cc_oauth_connections (
+  id uuid primary key default gen_random_uuid(),
+  tenant_id uuid not null references tenants(id) on delete cascade,
+  provider text not null check (provider in (
+    'quickbooks', 'google', 'meta', 'vapi', 'twilio', 'anthropic', 'openai'
+  )),
+  account_label text,
+  access_token_ciphertext text not null,
+  refresh_token_ciphertext text,
+  token_metadata jsonb not null default '{}'::jsonb,
+  expires_at timestamptz,
+  scopes text[],
+  status text not null default 'active' check (status in ('active', 'revoked', 'error')),
+  last_error text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (tenant_id, provider, account_label)
+);
+
+create index if not exists cc_oauth_connections_tenant_provider_idx
+  on cc_oauth_connections (tenant_id, provider);
+
+create trigger cc_oauth_connections_updated_at
+  before update on cc_oauth_connections
+  for each row execute function set_updated_at();
+
+alter table cc_oauth_connections enable row level security;
+
+drop policy if exists cc_oauth_connections_tenant_select on cc_oauth_connections;
+create policy cc_oauth_connections_tenant_select on cc_oauth_connections
+  for select using (tenant_id = current_tenant_id() or is_platform_operator());
+
+drop policy if exists cc_oauth_connections_tenant_modify on cc_oauth_connections;
+create policy cc_oauth_connections_tenant_modify on cc_oauth_connections
+  for all using (tenant_id = current_tenant_id() or is_platform_operator())
+  with check (tenant_id = current_tenant_id() or is_platform_operator());
+
+revoke all on cc_oauth_connections from anon, authenticated;
+grant select, insert, update, delete on cc_oauth_connections to authenticated;
+-- [CC-FOUNDATION] Phase 2: Vault — encrypted, tenant-scoped document store.
+-- Files live in the existing private `documents` Supabase Storage bucket under
+-- the path prefix `vault/{tenant_id}/{document_id}-{filename}`. This row table
+-- holds metadata + ownership + RLS; storage RLS is enforced by serving signed
+-- URLs only from server actions (never client-side direct access).
+
+create table if not exists cc_vault_documents (
+  id uuid primary key default gen_random_uuid(),
+  tenant_id uuid not null references tenants(id) on delete cascade,
+  name text not null check (length(name) between 1 and 255),
+  description text,
+  mime_type text,
+  size_bytes bigint not null check (size_bytes >= 0),
+  storage_path text not null unique,
+  uploaded_by uuid references auth.users(id) on delete set null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  -- Hard-bind the storage object to the row's tenant. Without this, a tenant
+  -- with insert privileges on the row table could record an arbitrary
+  -- storage_path and use server actions (which run as service role) to mint
+  -- signed URLs or delete files belonging to other tenants.
+  constraint cc_vault_documents_storage_path_tenant_scoped
+    check (storage_path like 'vault/' || tenant_id::text || '/%')
+);
+
+create index if not exists cc_vault_documents_tenant_created_idx
+  on cc_vault_documents (tenant_id, created_at desc);
+
+create trigger cc_vault_documents_updated_at
+  before update on cc_vault_documents
+  for each row execute function set_updated_at();
+
+alter table cc_vault_documents enable row level security;
+
+drop policy if exists cc_vault_documents_tenant_select on cc_vault_documents;
+create policy cc_vault_documents_tenant_select on cc_vault_documents
+  for select using (tenant_id = current_tenant_id() or is_platform_operator());
+
+drop policy if exists cc_vault_documents_tenant_modify on cc_vault_documents;
+create policy cc_vault_documents_tenant_modify on cc_vault_documents
+  for all using (tenant_id = current_tenant_id() or is_platform_operator())
+  with check (tenant_id = current_tenant_id() or is_platform_operator());
+
+-- Writes go through server actions (service role) only. Authenticated tokens
+-- can read their own tenant's rows (RLS still applies) but cannot insert /
+-- update / delete directly. This blocks the IDOR vector where a tenant would
+-- otherwise insert a row with a crafted storage_path pointing at another
+-- tenant's file, then trick a server action into signing or deleting it.
+revoke all on cc_vault_documents from anon, authenticated;
+grant select on cc_vault_documents to authenticated;
+-- [CC-FOUNDATION] Phase 2 vertical: Estimating
+-- Per-tenant estimates with line items and an optional unit-price catalog.
+-- Money is stored in cents (bigint). Tax is stored as basis points (bps:
+-- 1% = 100 bps) so we never round-trip through floats.
+
+do $$
+begin
+  if not exists (select 1 from pg_type where typname = 'cc_estimate_status') then
+    create type cc_estimate_status as enum (
+      'draft', 'sent', 'accepted', 'declined', 'expired'
+    );
+  end if;
+end$$;
+
+create table if not exists cc_estimate_catalog_items (
+  id uuid primary key default gen_random_uuid(),
+  tenant_id uuid not null references tenants(id) on delete cascade,
+  name text not null check (length(name) between 1 and 200),
+  description text,
+  unit text not null default 'ea' check (length(unit) between 1 and 16),
+  default_price_cents bigint not null check (default_price_cents >= 0),
+  category text,
+  is_active boolean not null default true,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+create index if not exists cc_estimate_catalog_items_tenant_idx
+  on cc_estimate_catalog_items (tenant_id, is_active, name);
+create trigger cc_estimate_catalog_items_updated_at
+  before update on cc_estimate_catalog_items
+  for each row execute function set_updated_at();
+
+create table if not exists cc_estimates (
+  id uuid primary key default gen_random_uuid(),
+  tenant_id uuid not null references tenants(id) on delete cascade,
+  estimate_number text not null,
+  title text not null check (length(title) between 1 and 200),
+  company_id uuid references companies(id) on delete set null,
+  project_id uuid references projects(id) on delete set null,
+  status cc_estimate_status not null default 'draft',
+  subtotal_cents bigint not null default 0 check (subtotal_cents >= 0),
+  tax_rate_bps integer not null default 0 check (tax_rate_bps between 0 and 10000),
+  tax_cents bigint not null default 0 check (tax_cents >= 0),
+  total_cents bigint not null default 0 check (total_cents >= 0),
+  valid_until date,
+  sent_at timestamptz,
+  accepted_at timestamptz,
+  declined_at timestamptz,
+  notes text,
+  terms text,
+  created_by uuid references auth.users(id) on delete set null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  deleted_at timestamptz,
+  unique (tenant_id, estimate_number)
+);
+create index if not exists cc_estimates_tenant_status_idx
+  on cc_estimates (tenant_id, status, created_at desc);
+create index if not exists cc_estimates_tenant_company_idx
+  on cc_estimates (tenant_id, company_id);
+create trigger cc_estimates_updated_at
+  before update on cc_estimates
+  for each row execute function set_updated_at();
+
+create table if not exists cc_estimate_line_items (
+  id uuid primary key default gen_random_uuid(),
+  estimate_id uuid not null references cc_estimates(id) on delete cascade,
+  tenant_id uuid not null references tenants(id) on delete cascade,
+  position integer not null check (position >= 0),
+  description text not null check (length(description) between 1 and 500),
+  quantity numeric(12, 4) not null default 1 check (quantity > 0),
+  unit text not null default 'ea' check (length(unit) between 1 and 16),
+  unit_price_cents bigint not null check (unit_price_cents >= 0),
+  total_cents bigint not null check (total_cents >= 0),
+  catalog_item_id uuid references cc_estimate_catalog_items(id) on delete set null,
+  created_at timestamptz not null default now()
+);
+create index if not exists cc_estimate_line_items_estimate_idx
+  on cc_estimate_line_items (estimate_id, position);
+create index if not exists cc_estimate_line_items_tenant_idx
+  on cc_estimate_line_items (tenant_id);
+
+alter table cc_estimate_catalog_items enable row level security;
+alter table cc_estimates enable row level security;
+alter table cc_estimate_line_items enable row level security;
+
+drop policy if exists cc_estimate_catalog_items_tenant_select on cc_estimate_catalog_items;
+create policy cc_estimate_catalog_items_tenant_select on cc_estimate_catalog_items
+  for select using (tenant_id = current_tenant_id() or is_platform_operator());
+drop policy if exists cc_estimate_catalog_items_tenant_modify on cc_estimate_catalog_items;
+create policy cc_estimate_catalog_items_tenant_modify on cc_estimate_catalog_items
+  for all using (tenant_id = current_tenant_id() or is_platform_operator())
+  with check (tenant_id = current_tenant_id() or is_platform_operator());
+
+drop policy if exists cc_estimates_tenant_select on cc_estimates;
+create policy cc_estimates_tenant_select on cc_estimates
+  for select using (tenant_id = current_tenant_id() or is_platform_operator());
+drop policy if exists cc_estimates_tenant_modify on cc_estimates;
+create policy cc_estimates_tenant_modify on cc_estimates
+  for all using (tenant_id = current_tenant_id() or is_platform_operator())
+  with check (tenant_id = current_tenant_id() or is_platform_operator());
+
+drop policy if exists cc_estimate_line_items_tenant_select on cc_estimate_line_items;
+create policy cc_estimate_line_items_tenant_select on cc_estimate_line_items
+  for select using (tenant_id = current_tenant_id() or is_platform_operator());
+drop policy if exists cc_estimate_line_items_tenant_modify on cc_estimate_line_items;
+create policy cc_estimate_line_items_tenant_modify on cc_estimate_line_items
+  for all using (tenant_id = current_tenant_id() or is_platform_operator())
+  with check (tenant_id = current_tenant_id() or is_platform_operator());
+
+-- All writes happen through server actions that run as service role and
+-- enforce tenant isolation in code. Authenticated tokens get read access only.
+revoke all on cc_estimate_catalog_items from anon, authenticated;
+revoke all on cc_estimates from anon, authenticated;
+revoke all on cc_estimate_line_items from anon, authenticated;
+grant select on cc_estimate_catalog_items to authenticated;
+grant select on cc_estimates to authenticated;
+grant select on cc_estimate_line_items to authenticated;
+-- [CC-FOUNDATION] Estimating hardening: atomic numbering + tenant-coupled FK.
+-- Eliminates the read-then-write race in nextEstimateNumber and the cross-tenant
+-- foreign-key window on cc_estimate_line_items.
+
+create table if not exists cc_estimate_number_counters (
+  tenant_id uuid not null references tenants(id) on delete cascade,
+  year integer not null check (year between 2000 and 9999),
+  last_seq integer not null default 0 check (last_seq >= 0),
+  updated_at timestamptz not null default now(),
+  primary key (tenant_id, year)
+);
+
+alter table cc_estimate_number_counters enable row level security;
+revoke all on cc_estimate_number_counters from anon, authenticated;
+-- The counter table is operated on exclusively from server actions running as
+-- service role; tenants never need read access.
+
+create or replace function cc_next_estimate_seq(p_tenant uuid, p_year integer)
+returns integer
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_seq integer;
+begin
+  insert into cc_estimate_number_counters as c (tenant_id, year, last_seq)
+  values (p_tenant, p_year, 1)
+  on conflict (tenant_id, year) do update
+    set last_seq = c.last_seq + 1,
+        updated_at = now()
+  returning c.last_seq into v_seq;
+  return v_seq;
+end
+$$;
+
+revoke all on function cc_next_estimate_seq(uuid, integer) from public, anon, authenticated;
+grant execute on function cc_next_estimate_seq(uuid, integer) to service_role;
+
+-- Backfill the counter from any estimates that already exist so the next
+-- allocation never collides with an older `EST-YYYY-NNNN`.
+insert into cc_estimate_number_counters (tenant_id, year, last_seq)
+select tenant_id,
+       (substring(estimate_number from 'EST-(\d{4})-'))::int,
+       max((substring(estimate_number from 'EST-\d{4}-(\d+)$'))::int)
+from cc_estimates
+where estimate_number ~ '^EST-\d{4}-\d+$'
+group by tenant_id, (substring(estimate_number from 'EST-(\d{4})-'))::int
+on conflict (tenant_id, year) do update
+  set last_seq = greatest(cc_estimate_number_counters.last_seq, excluded.last_seq);
+
+-- Tenant-coupled FK: a line item cannot reference an estimate that belongs to
+-- a different tenant. Requires a unique key on (id, tenant_id) of the parent.
+alter table cc_estimates
+  drop constraint if exists cc_estimates_id_tenant_unique;
+alter table cc_estimates
+  add constraint cc_estimates_id_tenant_unique unique (id, tenant_id);
+
+alter table cc_estimate_line_items
+  drop constraint if exists cc_estimate_line_items_estimate_id_fkey;
+alter table cc_estimate_line_items
+  drop constraint if exists cc_estimate_line_items_estimate_tenant_fkey;
+alter table cc_estimate_line_items
+  add constraint cc_estimate_line_items_estimate_tenant_fkey
+  foreign key (estimate_id, tenant_id)
+  references cc_estimates (id, tenant_id)
+  on delete cascade;

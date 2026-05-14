@@ -116,7 +116,7 @@ CC ships these as `lib/` modules. Each one is a prerequisite for many of the ver
 5. `src/lib/push/` — push notifications (when mobile lands)
 
 ### Phase 2 — Core trades verticals (revenue-critical, no good generic alternative)
-6. **Estimating** end-to-end (catalog → builder → PDF → e-sign)
+6. **Estimating** — partial: builder + line items + branded PDF download landed (`src/lib/estimating/`, `cc_estimates*` tables, `/app/estimating`). Catalog UI and e-signature still pending.
 7. **Invoicing** end-to-end (drafts → send → Stripe payments → recurring)
 8. **AIA / construction-billing** (pay apps, retainage, lien waivers, draw schedules)
 9. **Change orders** with e-sign
