@@ -8,13 +8,14 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { formatDateTime } from "@/lib/utils";
-import { ChevronLeft } from "lucide-react";
+import { ChevronLeft, Eye } from "lucide-react";
 import {
   updateUserProfileAction,
   setUserPasswordAction,
   generateRandomPasswordAction,
   toggleForcePasswordResetAction,
 } from "./actions";
+import { startImpersonationAction } from "./impersonation-actions";
 
 type Params = Promise<{ id: string; uid: string }>;
 type Search = Promise<{ temp_password?: string; error?: string }>;
@@ -113,6 +114,36 @@ export default async function TenantUserDetailPage({
             </Badge>
           )}
         </div>
+      </div>
+
+      <div className="mt-4 rounded-lg border bg-[var(--color-background)] p-4">
+        <form
+          action={startImpersonationAction}
+          className="flex flex-wrap items-end gap-3"
+        >
+          <input type="hidden" name="tenant_id" value={tenantId} />
+          <input type="hidden" name="user_id" value={userId} />
+          <div className="flex-1 min-w-[260px]">
+            <Label htmlFor="reason" className="text-xs">
+              View as {user.full_name || user.email}
+            </Label>
+            <Input
+              id="reason"
+              name="reason"
+              placeholder="Reason (optional, audit log)"
+              className="mt-1"
+            />
+          </div>
+          <Button type="submit" size="sm">
+            <Eye className="mr-1.5 h-3.5 w-3.5" />
+            Start
+          </Button>
+        </form>
+        <p className="mt-2 text-xs text-[var(--color-muted-foreground)]">
+          Opens the tenant view as a super admin of {tenant.name}. A banner
+          shows on every page during the session, and start/stop events are
+          written to the audit log.
+        </p>
       </div>
 
       {tempPassword && (

@@ -3,6 +3,7 @@ import Link from "next/link";
 import { getSession } from "@/lib/auth/session";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { Sidebar, type NavItem } from "@/components/app-shell/sidebar";
+import { ImpersonationBanner } from "@/components/app-shell/impersonation-banner";
 import {
   LayoutDashboard,
   Users,
@@ -48,26 +49,50 @@ export default async function AppLayout({
 }) {
   const session = await getSession();
   if (session.kind === "anonymous") redirect("/login");
-  if (session.kind === "platform_operator") redirect("/admin");
-  if (session.passwordResetRequired) redirect("/set-password");
-  if (!session.onboardingComplete && session.tenantStatus === "onboarding") {
-    redirect("/onboarding");
+
+  // Platform operators are allowed in /app ONLY when actively impersonating a tenant user.
+  // Without impersonation, they belong in /admin.
+  if (session.kind === "platform_operator") {
+    if (!session.impersonating) redirect("/admin");
+    if (session.passwordResetRequired) redirect("/set-password");
+  } else {
+    if (session.passwordResetRequired) redirect("/set-password");
+    if (!session.onboardingComplete && session.tenantStatus === "onboarding") {
+      redirect("/onboarding");
+    }
+    if (session.tenantStatus === "suspended") {
+      redirect(
+        "/login?error=" +
+          encodeURIComponent(
+            "Your workspace has been suspended. Contact support."
+          )
+      );
+    }
   }
-  if (session.tenantStatus === "suspended") {
-    redirect("/login?error=" + encodeURIComponent("Your workspace has been suspended. Contact support."));
-  }
+
+  // Effective tenant context: real tenant user OR the impersonation target.
+  const tenantId =
+    session.kind === "tenant_user"
+      ? session.tenantId
+      : session.impersonating!.tenantId;
+  const sessionEmail = session.email;
+  const sessionRolesDisplay =
+    session.kind === "tenant_user"
+      ? session.roleKeys.join(", ") || "—"
+      : "super_admin (impersonating)";
+  const isFieldRole = session.kind === "tenant_user" ? session.isFieldRole : false;
 
   const admin = createAdminClient();
   const [{ data: tenant }, { data: billing }] = await Promise.all([
     admin
       .from("tenants")
       .select("name, primary_color_hex")
-      .eq("id", session.tenantId)
+      .eq("id", tenantId)
       .single(),
     admin
       .from("tenant_billing")
       .select("billing_status, trial_ends_at, card_required_at, stripe_customer_id")
-      .eq("tenant_id", session.tenantId)
+      .eq("tenant_id", tenantId)
       .single(),
   ]);
 
@@ -79,7 +104,7 @@ export default async function AppLayout({
     daysRemaining !== null &&
     daysRemaining <= 30;
 
-  const nav = session.isFieldRole ? NAV_FIELD : NAV_FULL;
+  const nav = isFieldRole ? NAV_FIELD : NAV_FULL;
 
   return (
     <div className="flex min-h-screen">
@@ -89,9 +114,9 @@ export default async function AppLayout({
         items={nav}
         footer={
           <div className="space-y-1 text-xs text-[var(--color-muted-foreground)]">
-            <div>{session.email}</div>
+            <div>{sessionEmail}</div>
             <div className="text-[10px] uppercase tracking-wide">
-              {session.roleKeys.join(", ") || "—"}
+              {sessionRolesDisplay}
             </div>
             <form action="/logout" method="post">
               <Button
@@ -109,6 +134,7 @@ export default async function AppLayout({
       />
 
       <main className="flex-1 overflow-y-auto">
+        <ImpersonationBanner />
         {showTrialWarning && (
           <div className="border-b bg-[var(--color-warning)]/10 px-6 py-3">
             <div className="flex items-center justify-between gap-4">

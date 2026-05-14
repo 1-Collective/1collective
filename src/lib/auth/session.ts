@@ -3,6 +3,17 @@ import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 
+export type ImpersonationContext = {
+  sessionId: string;
+  startedAt: string;
+  tenantId: string;
+  tenantSlug: string;
+  tenantName: string;
+  targetUserId: string;
+  targetUserEmail: string;
+  targetUserName: string | null;
+};
+
 export type SessionContext =
   | { kind: "anonymous" }
   | {
@@ -23,6 +34,7 @@ export type SessionContext =
       email: string;
       operatorRole: string;
       passwordResetRequired: boolean;
+      impersonating: ImpersonationContext | null;
     };
 
 export const getSession = cache(async (): Promise<SessionContext> => {
@@ -41,12 +53,63 @@ export const getSession = cache(async (): Promise<SessionContext> => {
     .maybeSingle();
 
   if (operator) {
+    // Look up active impersonation, if any
+    const { data: imp } = await admin
+      .from("impersonation_sessions")
+      .select(
+        "id, started_at, target_user_id, target_tenant_id, tenants ( slug, name ), users ( email, full_name )"
+      )
+      .eq("operator_id", operator.id)
+      .is("ended_at", null)
+      .order("started_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    type ImpRow = {
+      id: string;
+      started_at: string;
+      target_user_id: string;
+      target_tenant_id: string;
+      tenants:
+        | { slug: string; name: string }
+        | { slug: string; name: string }[]
+        | null;
+      users:
+        | { email: string; full_name: string | null }
+        | { email: string; full_name: string | null }[]
+        | null;
+    } | null;
+
+    const impTyped = imp as ImpRow;
+    let impersonating: ImpersonationContext | null = null;
+    if (impTyped) {
+      const tenant = Array.isArray(impTyped.tenants)
+        ? impTyped.tenants[0]
+        : impTyped.tenants;
+      const target = Array.isArray(impTyped.users)
+        ? impTyped.users[0]
+        : impTyped.users;
+      if (tenant && target) {
+        impersonating = {
+          sessionId: impTyped.id,
+          startedAt: impTyped.started_at,
+          tenantId: impTyped.target_tenant_id,
+          tenantSlug: tenant.slug,
+          tenantName: tenant.name,
+          targetUserId: impTyped.target_user_id,
+          targetUserEmail: target.email,
+          targetUserName: target.full_name,
+        };
+      }
+    }
+
     return {
       kind: "platform_operator",
       userId: operator.id,
       email: operator.email,
       operatorRole: operator.operator_role,
       passwordResetRequired: !!operator.password_reset_required,
+      impersonating,
     };
   }
 

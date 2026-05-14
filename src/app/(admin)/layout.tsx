@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { getSession } from "@/lib/auth/session";
 import { Sidebar, type NavItem } from "@/components/app-shell/sidebar";
+import { ImpersonationBanner } from "@/components/app-shell/impersonation-banner";
 import {
   LayoutDashboard,
   Building2,
@@ -62,7 +63,10 @@ export default async function AdminLayout({
           </div>
         }
       />
-      <main className="flex-1 overflow-y-auto">{children}</main>
+      <main className="flex-1 overflow-y-auto">
+        <ImpersonationBanner />
+        {children}
+      </main>
     </div>
   );
 }
