@@ -32,6 +32,34 @@ Last audited: 2026-05-14 (commit `0893a31`).
 - Currently falls back to `https://1-collective.replit.app` in `src/app/forgot-password/actions.ts` and `src/app/(app)/app/settings/account/actions.ts`.
 - If the real prod URL differs, password-reset and email-change confirmation links will be broken.
 
+### C6. User-flagged attention list — resolve each before publish
+
+Five items the product owner has explicitly flagged as needing attention before launch. Some are net-new work, some are scope-confirmation gates. Resolve each with a yes/no/deferred verdict before flipping the publish switch.
+
+**A. Account-security follow-ups (currently deferred — confirm verdict)**
+- WebAuthn / passkeys (web "biometric"). Detail: see MEDIUM line 99.
+- MFA / TOTP via Supabase Auth. Detail: see MEDIUM line 100.
+- Account-deletion UI (multi-tenant safety logic for sole-super-admin transfer). Detail: see MEDIUM line 101.
+- Verdict needed: ship v1 without these (current direction), or block publish until at least MFA + deletion ship?
+
+**B. Resend wired for transactional email (currently deferred — confirm verdict)**
+- Status: `RESEND_API_KEY` is in `.env.example` but no factory exists in `src/lib/integrations/`. Invite-link signup never emails the invitee; the trial-expiry warning has no email backstop. Detail: see HIGH line 80–82.
+- Verdict needed: rely on Supabase's built-in email for v1 (current direction — note this means invites only work if you hand-deliver the link), or build the Resend factory + invite/trial-expiry templates before publish?
+
+**C. Realtime / notifications / global search (currently post-launch)**
+- Status: zero Supabase Realtime usage anywhere. No notification center. No global search. Detail: see HIGH line 84–91.
+- Verdict needed: ship v1 SSR-only (current direction), or build at least the notification center before publish?
+
+**D. Contractor Command repo — boundary**
+- Rule: we do NOT touch the Contractor Command repo directly. CC code is only ported into `src/foundational/` with a `// [CC-FOUNDATION]` header. CC stays read-only as a reference.
+- Pre-publish check: `rg "[CC-FOUNDATION]" src/foundational/` to confirm every ported file carries the tag. Any untagged file in `src/foundational/` is a process violation and must be tagged or moved.
+
+**E. Shipping modules — no cosmetic refactors**
+- Rule: Branding, CRM, Revenue, Drive, Onboarding, Billing-display work today. Do not touch them for cosmetics-only changes during the pre-publish push. Bug fixes only.
+- Pre-publish check: review the git diff of each shipping module since this checkpoint; reject any change that is purely cosmetic or refactoring without a linked bug.
+
+---
+
 ### C5. Audit sign-in / sign-up for bypasses before publish
 - Confirm there is **no way to reach `/app/*`, `/admin/*`, or `/onboarding/*` without a valid Supabase session**. Currently enforced in two layers (`src/proxy.ts` middleware + per-layout `requireTenantUser()` checks) — verify both still hold after every auth-related change.
 - Walk every public path in `src/proxy.ts:PUBLIC_PATHS` and confirm it cannot be turned into an authentication bypass:
